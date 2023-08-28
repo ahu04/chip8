@@ -1,4 +1,3 @@
-
 const RAM_SIZE: usize = 4096;
 const RAM_START: usize = 0x200;
 
@@ -8,7 +7,6 @@ pub struct Ram {
 
 impl Ram {
     pub fn new() -> Ram {
-
         let mut ram = Ram {
             data: [0; RAM_SIZE],
         };

@@ -1,5 +1,5 @@
-mod ram;
 mod cpu;
+mod ram;
 
 pub struct Chip8 {
     ram: ram::Ram,
@@ -11,7 +11,7 @@ impl Chip8 {
         return Chip8 {
             ram: ram::Ram::new(),
             cpu: cpu::Cpu::new(),
-        }
+        };
     }
 
     pub fn init_rom(&mut self, rom: &Vec<u8>) {
