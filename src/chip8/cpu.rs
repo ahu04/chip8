@@ -1,4 +1,6 @@
 use super::ram::Ram;
+use super::display::Display;
+
 use rand::prelude::*;
 const RAM_START: u16 = 0x200;
 
@@ -129,7 +131,11 @@ impl Cpu {
                 println!("not implemented");
                 self.pc += 2;
             }
-            Instruction { h: 0xE, y: 0xA, .. } => {}
+            Instruction { h: 0xE, l: 1, .. } => {
+                // todo
+                println!("not imp");
+                self.pc += 2;
+            }
             Instruction {
                 h: 0xF, y: 0, l: 7, ..
             } => {
