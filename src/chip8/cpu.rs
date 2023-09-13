@@ -1,5 +1,5 @@
+use super::display::{Display, CHIP8_HEIGHT, CHIP8_WIDTH};
 use super::ram::Ram;
-use super::display::Display;
 
 use rand::prelude::*;
 const RAM_START: u16 = 0x200;
@@ -40,7 +40,8 @@ impl Cpu {
         return cpu;
     }
 
-    pub fn step(&mut self, ram: &mut Ram) {
+    pub fn step(&mut self, ram: &mut Ram, display: &mut Display) {
+        display.poll_keys();
         let mut hi = ram.read(self.pc) as u16;
         let mut lo = ram.read(self.pc + 1) as u16;
         let raw_instr = hi << 8 | lo;
@@ -48,7 +49,7 @@ impl Cpu {
         let nnn = raw_instr & 0x0FFF;
         let kk = (raw_instr & 0x00FF) as u8;
         match instr {
-            Instruction { h: 0, l: 0, .. } => self.cls(),
+            Instruction { h: 0, l: 0, .. } => self.cls(display),
             Instruction { h: 0, l: 0xE, .. } => self.ret(),
             Instruction { h: 1, .. } => self.jump(nnn),
             Instruction { h: 2, .. } => self.call(nnn),
@@ -102,7 +103,7 @@ impl Cpu {
                 self.regs[0xF] = !borrow;
                 self.set_reg(instr.x, res);
             }
-            Instruction { h: 8, l: 8, .. } => {
+            Instruction { h: 8, l: E, .. } => {
                 self.regs[0xF] = self.regs[instr.x as usize] & 0x1;
                 self.set_reg(instr.x, self.regs[instr.x as usize] << 1);
             }
@@ -124,17 +125,21 @@ impl Cpu {
                 self.set_reg(instr.x, rand::random::<u8>() & kk);
             }
             Instruction { h: 0xD, .. } => {
-                self.display_sprite(instr.x, instr.y, instr.l);
+                self.display_sprite(ram, display, instr.x, instr.y, instr.l);
             }
             Instruction { h: 0xE, l: 0xE, .. } => {
-                // todo
-                println!("not implemented");
-                self.pc += 2;
+                if display.is_key_down(self.regs[instr.x as usize]) {
+                    self.pc += 4;
+                } else {
+                    self.pc += 2;
+                }
             }
             Instruction { h: 0xE, l: 1, .. } => {
-                // todo
-                println!("not imp");
-                self.pc += 2;
+                if !display.is_key_down(self.regs[instr.x as usize]) {
+                    self.pc += 4;
+                } else {
+                    self.pc += 2;
+                }
             }
             Instruction {
                 h: 0xF, y: 0, l: 7, ..
@@ -147,8 +152,17 @@ impl Cpu {
                 l: 0xA,
                 ..
             } => {
-                println!("not implemented");
-                self.pc += 2;
+                let mut press: u8 = 0xFF;
+                while (press == 0xFF) {
+                    for i in 0..16 {
+                        if display.is_key_down(i) {
+                            press = i;
+                            break;
+                        }
+                    }
+                    display.poll_keys();
+                }
+                self.set_reg(instr.x, press);
             }
             Instruction {
                 h: 0xF, y: 1, l: 5, ..
@@ -174,8 +188,7 @@ impl Cpu {
             Instruction {
                 h: 0xF, y: 2, l: 9, ..
             } => {
-                // todo
-                println!("not implemented");
+                self.i = (self.regs[instr.x as usize] as u16) * 5;
                 self.pc += 2;
             }
             Instruction {
@@ -195,36 +208,34 @@ impl Cpu {
             }
             _ => panic!("unknown instruction: {:x}", raw_instr),
         }
+        if (self.dt > 0) {
+            self.dt -= 1;
+        }
     }
 
-    fn cls(&mut self) {
-        // todo
-        println!("cls");
+    fn cls(&mut self, display : &mut Display) {
+        display.clear();
         self.pc += 2;
     }
 
     fn ret(&mut self) {
-        println!("ret");
-        self.pc = self.stack[self.sp as usize];
         self.sp -= 1;
+        self.pc = self.stack[self.sp as usize];
     }
 
     fn jump(&mut self, addr: u16) {
-        println!("jump");
         self.pc = addr;
     }
 
     fn call(&mut self, addr: u16) {
-        println!("call");
+        self.stack[self.sp as usize] = self.pc + 2;
         self.sp += 1;
-        self.stack[self.sp as usize] = self.pc;
         self.pc = addr;
     }
 
     // if c && a == b, skip or
     // if !c && a != b, skip, otherwise don't skip
     fn skip(&mut self, a: u8, b: u8, c: bool) {
-        println!("conditional skip");
         if (c && a == b) || (!c && a != b) {
             self.pc += 4;
         } else {
@@ -237,8 +248,29 @@ impl Cpu {
         self.pc += 2;
     }
 
-    fn display_sprite(&mut self, x: u8, y: u8, n: u8) {
-        // todo
+    // The interpreter reads n bytes from memory, 
+    // starting at the address stored in I. These bytes are 
+    // then displayed as sprites on screen at coordinates (Vx, Vy). 
+    // Sprites are XORed onto the existing screen. If this causes any
+    // pixels to be erased, VF is set to 1, otherwise it is set to 0. 
+    // If the sprite is positioned so part of it is outside the coordinates
+    // of the display, it wraps around to the opposite side of the screen. 
+    // See instruction 8xy3 for more information on XOR, and section 2.4, 
+    // Display, for more information on the Chip-8 screen and sprites.
+
+    fn display_sprite(&mut self, ram: &mut Ram, display: &mut Display, x: u8, y: u8, n: u8) {
+        self.regs[0xF] = 0;
+        for byte in 0..n {
+            let y = (self.regs[y as usize] as usize + byte as usize) % CHIP8_HEIGHT;
+            for bit in 0..8 {
+                let x = (self.regs[x as usize] as usize + bit) % CHIP8_WIDTH;
+                let new_pixel = (ram.read(self.i + byte as u16) >> (7 - bit)) & 1;
+
+                let curr = display.read_pixel(x, y);
+                self.regs[0xF] |= new_pixel & curr;
+                display.write_pixel(x, y, curr ^ new_pixel);
+            }
+        }
         self.pc += 2;
     }
 
@@ -275,10 +307,9 @@ fn add_with_carry(a: u16, b: u16) -> (u8, u8) {
 }
 
 fn sub_with_borrow(a: u16, b: u16) -> (u8, u8) {
-    let res = a - b;
-    if res > 255 {
-        return ((res & 0xFF) as u8, 1);
+    if a > b {
+        return (((a - b) & 0xFF) as u8, 1);
     } else {
-        return (res as u8, 0);
+        return ((a - b) as u8, 0);
     }
 }

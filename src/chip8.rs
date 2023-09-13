@@ -1,6 +1,8 @@
 mod cpu;
-mod ram;
 mod display;
+mod ram;
+use std::thread;
+use std::time::Duration;
 
 pub struct Chip8 {
     ram: ram::Ram,
@@ -25,6 +27,7 @@ impl Chip8 {
         loop {
             self.cpu.step(&mut self.ram, &mut self.display);
             self.display.refresh();
+            thread::sleep(Duration::from_millis(1));
         }
     }
 }
