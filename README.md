@@ -8,8 +8,13 @@ Chip-8 allowed video games to be more easily programmable, and portable on early
 
 I wanted to learn Rust, and chip8 is a classic systems project, so here I am! 
 
-Still a WIP.
+Overall, definitely fought with the Rust compiler a bit, learned some SDL2, and some good debugging skills :)
+
+### To build / run on your machine: 
+
+Git clone this repo, then, from chip8 directory, run "cargo run --release -- pathToROM". For example, if I wanted to run WIPEOFF, I would run "cargo run --release -- roms/WIPEOFF". 
 
 ### Resources Used:
 - [Cowgod's Chip-8 Technical Reference](http://devernay.free.fr/hacks/chip8/C8TECH10.HTM#1.0)
 - [Varun's Chip-8 implementation](https://github.com/varunshenoy/rusty-chip8/tree/main)
+- [Colin Eberhardt's WASM Chip-8](https://colineberhardt.github.io/wasm-rust-chip8/web/)
